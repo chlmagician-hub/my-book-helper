@@ -47,7 +47,7 @@ def get_model() -> genai.GenerativeModel:
         st.stop()
 
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-1.5-flash")
+    return genai.GenerativeModel("models/gemini-1.5-flash-latest")
 
 
 def extract_image_bytes(uploaded_file) -> tuple[bytes, str]:
@@ -128,5 +128,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
