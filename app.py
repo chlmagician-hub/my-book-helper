@@ -1,55 +1,51 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import io
 
-# 1. 페이지 기본 설정
-st.set_page_config(page_title="나만의 도서 해설 비서", page_icon="📖")
+st.set_page_config(page_title="AI 도서 비서 - 최종 검증판", page_icon="💡")
+st.title("💡 도서 비서 (자동 모델 탐지 버전)")
 
-st.title("📖 나만의 도서 해설 비서 (최종본)")
-st.write("책 사진을 찍거나 업로드하면 Gemini AI가 내용을 설명해줍니다.")
-
-# 2. API 키 설정 (Streamlit Secrets 사용)
+# 1. API 키 설정
 api_key = st.secrets.get("GEMINI_API_KEY")
-
 if not api_key:
-    st.error("⚠️ API 키가 설정되지 않았습니다. Streamlit Settings > Secrets에 키를 입력해주세요.")
+    st.error("API 키를 Secrets에 입력해주세요!")
     st.stop()
 
-# 구글 AI 설정
 genai.configure(api_key=api_key)
 
-# 3. 모델 설정 (가장 안정적인 호출 방식)
-# 최신 모델인 gemini-1.5-flash를 사용합니다.
-model = genai.GenerativeModel('gemini-1.5-flash')
+# 2. [핵심] 사용 가능한 모델 자동으로 찾기
+@st.cache_resource
+def find_available_model():
+    try:
+        # 내 API 키가 쓸 수 있는 모델 목록을 가져옵니다.
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 그 중 1.5-flash가 들어간 최신 모델을 먼저 찾습니다.
+        for m_name in models:
+            if '1.5-flash' in m_name:
+                return genai.GenerativeModel(m_name)
+        # 없으면 목록 중 첫 번째 모델이라도 가져옵니다.
+        return genai.GenerativeModel(models[0])
+    except Exception as e:
+        st.error(f"모델 목록을 가져오지 못했습니다: {e}")
+        return None
 
-# 4. 화면 구성 (탭 사용)
-tab1, tab2 = st.tabs(["📷 카메라로 찍기", "📁 파일 업로드"])
+model = find_available_model()
 
-def process_image(img_file):
-    """이미지를 분석하고 결과를 화면에 출력하는 함수"""
-    if img_file is not None:
-        image = Image.open(img_file)
-        st.image(image, caption="선택된 이미지", use_container_width=True)
-        
-        if st.button("AI에게 분석 요청하기"):
-            with st.spinner("Gemini AI가 책을 읽고 있습니다... 🔍"):
+# 3. 사진 분석 로직
+img_file = st.camera_input("책을 찍어주세요")
+if img_file:
+    img = Image.open(img_file)
+    st.image(img, caption="촬영된 사진", use_container_width=True)
+    
+    if st.button("AI에게 물어보기"):
+        if model is None:
+            st.error("사용 가능한 AI 모델이 없습니다.")
+        else:
+            with st.spinner(f"AI({model.model_name})가 분석 중..."):
                 try:
-                    # AI에게 던지는 질문(프롬프트)
-                    prompt = "이 사진은 책의 표지이거나 본문입니다. 내용을 한국어로 친절하고 자세하게 설명해주세요."
-                    response = model.generate_content([prompt, image])
-                    
+                    prompt = "이 사진 속의 책 내용을 한국어로 아주 쉽게 설명해줘."
+                    response = model.generate_content([prompt, img])
                     st.success("✅ 분석 완료!")
-                    st.markdown("### 🤖 AI의 설명")
                     st.write(response.text)
                 except Exception as e:
-                    st.error(f"❌ 에러가 발생했습니다: {e}")
-                    st.info("Tip: API 키가 유효한지, 혹은 잠시 후 다시 시도해보세요.")
-
-with tab1:
-    camera_img = st.camera_input("책을 카메라에 비춰주세요")
-    process_image(camera_img)
-
-with tab2:
-    upload_img = st.file_uploader("이미지 파일을 선택하세요", type=['jpg', 'jpeg', 'png'])
-    process_image(upload_img)
+                    st.error(f"분석 중 에러 발생: {e}")
